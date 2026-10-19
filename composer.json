@@ -1,6 +1,6 @@
 {
     "name": "weldist/laravel-passport-client-scopes",
-    "description": "Per-client default scopes and RFC 6750 insufficient_scope responses for Laravel Passport client credentials tokens.",
+    "description": "Per-client default scopes and RFC 6750 bearer challenges for Laravel Passport client credentials tokens.",
     "keywords": ["laravel", "passport", "oauth2", "client-credentials", "scopes", "insufficient-scope"],
     "license": "MIT",
     "authors": [

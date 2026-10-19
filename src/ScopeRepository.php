@@ -6,6 +6,7 @@ namespace Weldist\Laravel\Passport\ClientScopes;
 
 use Laravel\Passport\Bridge\Scope;
 use Laravel\Passport\Bridge\ScopeRepository as PassportScopeRepository;
+use Laravel\Passport\Client;
 use League\OAuth2\Server\Entities\ClientEntityInterface;
 
 class ScopeRepository extends PassportScopeRepository
@@ -17,8 +18,16 @@ class ScopeRepository extends PassportScopeRepository
         ?string $userIdentifier = null,
         ?string $authCodeId = null
     ): array {
-        if ($grantType === 'client_credentials' && $scopes === []) {
-            $scopes = $this->grantedScopes($clientEntity);
+        if ($grantType !== 'client_credentials' || ! $client = $this->clients->findActive($clientEntity->getIdentifier())) {
+            return parent::finalizeScopes($scopes, $grantType, $clientEntity, $userIdentifier, $authCodeId);
+        }
+
+        if ($client->scopes === null && ! config('passport-client-scopes.allow_unconfigured_clients')) {
+            return [];
+        }
+
+        if ($scopes === []) {
+            $scopes = $this->grantedScopes($client);
         }
 
         return parent::finalizeScopes($scopes, $grantType, $clientEntity, $userIdentifier, $authCodeId);
@@ -27,11 +36,9 @@ class ScopeRepository extends PassportScopeRepository
     /**
      * @return Scope[]
      */
-    protected function grantedScopes(ClientEntityInterface $clientEntity): array
+    protected function grantedScopes(Client $client): array
     {
-        $client = $this->clients->findActive($clientEntity->getIdentifier());
-
-        return collect($client?->scopes ?? [])
+        return collect($client->scopes ?? [])
             ->map(fn (string $scope) => $this->getScopeEntityByIdentifier($scope))
             ->filter()
             ->values()

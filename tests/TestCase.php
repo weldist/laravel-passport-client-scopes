@@ -50,6 +50,7 @@ abstract class TestCase extends BaseTestCase
         $app['config']->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
         $app['config']->set('passport.private_key', $privateKey);
         $app['config']->set('passport.public_key', openssl_pkey_get_details($key)['key']);
+        $app['config']->set('auth.guards.api', ['driver' => 'passport', 'provider' => 'users']);
     }
 
     protected function defineDatabaseMigrations(): void

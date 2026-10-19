@@ -24,7 +24,9 @@ So every machine client has to keep a copy of its own permission list and send i
 
 Passport's token response doesn't include the `scope` field either, so a client can't tell which scopes it was actually issued.
 
-When a scope is missing, Passport answers with a generic `403`. A client cannot tell it apart from any other authorization failure, so it cannot react, for example by fetching a fresh token.
+When a scope is missing, Passport answers with a generic `403`. A client cannot tell it apart from any other authorization failure, so it cannot react, for example by fetching a fresh token. A missing or invalid token gets a `401` without the `WWW-Authenticate` header that [RFC 6750 §3](https://www.rfc-editor.org/rfc/rfc6750#section-3) requires.
+
+A client whose `scopes` column is `null` is not restricted at all: it receives any scope it asks for.
 
 ## The Solution
 
@@ -40,6 +42,9 @@ WWW-Authenticate: Bearer error="insufficient_scope", scope="venues:create"
 
 {"message": "Insufficient scope: venues:create"}
 ```
+
+- **Authentication challenges.** A request rejected by Passport for a missing token receives `WWW-Authenticate: Bearer`; an invalid or expired token receives `WWW-Authenticate: Bearer error="invalid_token"`.
+- **Unconfigured clients receive nothing.** A client credentials client whose `scopes` column is `null` receives no scopes, requested or not, until you fill its column.
 
 A client that does send `scope` still gets the narrower token it asked for. Other grant types are unaffected.
 
@@ -77,16 +82,32 @@ $client->forceFill(['scopes' => ['invoices:read', 'invoices:create']])->save();
 
 The client now requests a token without any scope and receives both.
 
+> [!WARNING]
+> Clients that existed before you installed the package have a `null` `scopes` column and receive no scopes from now on. Fill the column of every client credentials client before you deploy.
+
+## Configuration
+
+Publish the config file to change the defaults:
+
+```bash
+php artisan vendor:publish --tag=passport-client-scopes-config
+```
+
+| Key | Default | Effect |
+|---|---|---|
+| `allow_unconfigured_clients` | `false` | `true` restores Passport's behavior for a `null` column: the client receives any scope it requests. |
+| `authentication_challenge` | `true` | `false` leaves `401` responses without the `WWW-Authenticate` header. |
+
 ## How It Works
 
 | `oauth_clients.scopes` | Token request without `scope` | Token request with `scope` |
 |---|---|---|
-| `null` | no scopes | requested scopes (Passport default: no restriction) |
+| `null` | no scopes | no scopes (any requested scope with `allow_unconfigured_clients`) |
 | `[]` | no scopes | no scopes |
 | `["a", "b"]` | `a b` | requested scopes that are in the list |
 
 - Scopes in the column that aren't defined with `Passport::tokensCan()` are dropped.
-- `null` never grants everything by default — an unconfigured client receives nothing until you fill its column.
+- The `null` rule applies to client credentials tokens only. Authorization code, password and other grants keep Passport's behavior.
 - The token response always carries the issued scopes in its `scope` field, as [RFC 6749 §5.1](https://www.rfc-editor.org/rfc/rfc6749#section-5.1) requires whenever they differ from the requested ones. Clients should read their scopes from there and treat the access token itself as opaque ([RFC 9068 §6](https://www.rfc-editor.org/rfc/rfc9068#section-6)).
 
 ```json
@@ -95,10 +116,10 @@ The client now requests a token without any scope and receives both.
 
 ### Minimal override
 
-- `ScopeRepository` extends Passport's `Bridge\ScopeRepository` and overrides only `finalizeScopes()`: when the grant is `client_credentials` and nothing was requested, it substitutes the client's granted scopes, then hands over to Passport's own filtering.
+- `ScopeRepository` extends Passport's `Bridge\ScopeRepository` and overrides only `finalizeScopes()`: for a `client_credentials` grant it returns no scopes when the client's column is `null`, substitutes the client's granted scopes when nothing was requested, then hands over to Passport's own filtering.
 - `BearerTokenResponse` extends league's `BearerTokenResponse` and only adds the `scope` field. It is installed through `Passport::$authorizationServerResponseType` unless your application already set its own response type; in that case add the `scope` field there.
 - `MissingScopeException` is mapped to an `HttpException` carrying the `WWW-Authenticate` header; the rest of your exception rendering stays as it is.
-
+- `AuthenticationChallenge` is a global middleware that adds the header to a `401` response when the exception behind it comes from Passport's middleware or a guard with the `passport` driver. Your own rendering of `AuthenticationException` stays in place, and a `WWW-Authenticate` header you set yourself is kept.
 ## Testing
 
 ```bash

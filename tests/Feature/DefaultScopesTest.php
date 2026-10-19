@@ -34,6 +34,25 @@ class DefaultScopesTest extends TestCase
         $this->assertSame([], $this->grantedScopes($token));
     }
 
+    public function test_client_with_null_scopes_receives_no_requested_scope(): void
+    {
+        $client = $this->createClient(null);
+
+        $token = $this->requestToken($client, 'venues:read');
+
+        $this->assertSame([], $this->grantedScopes($token));
+    }
+
+    public function test_client_with_null_scopes_receives_requested_scopes_when_unconfigured_clients_are_allowed(): void
+    {
+        config()->set('passport-client-scopes.allow_unconfigured_clients', true);
+
+        $client = $this->createClient(null);
+
+        $this->assertSame([], $this->grantedScopes($this->requestToken($client)));
+        $this->assertSame(['venues:read'], $this->grantedScopes($this->requestToken($client, 'venues:read')));
+    }
+
     public function test_client_with_empty_scopes_receives_no_scope(): void
     {
         $client = $this->createClient([]);
