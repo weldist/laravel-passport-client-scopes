@@ -9,6 +9,7 @@ use Illuminate\Foundation\Exceptions\Handler;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Passport\Bridge\ScopeRepository as PassportScopeRepository;
 use Laravel\Passport\Exceptions\MissingScopeException;
+use Laravel\Passport\Passport;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class PassportClientScopesServiceProvider extends ServiceProvider
@@ -16,6 +17,8 @@ class PassportClientScopesServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(PassportScopeRepository::class, ScopeRepository::class);
+
+        Passport::$authorizationServerResponseType ??= new BearerTokenResponse;
     }
 
     public function boot(): void

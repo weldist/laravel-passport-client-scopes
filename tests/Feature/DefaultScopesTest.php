@@ -22,7 +22,7 @@ class DefaultScopesTest extends TestCase
 
         $token = $this->requestToken($client);
 
-        $this->assertSame(['venues:read', 'venues:create'], $this->tokenScopes($token['access_token']));
+        $this->assertSame(['venues:read', 'venues:create'], $this->grantedScopes($token));
     }
 
     public function test_client_with_null_scopes_receives_no_scope(): void
@@ -31,7 +31,7 @@ class DefaultScopesTest extends TestCase
 
         $token = $this->requestToken($client);
 
-        $this->assertSame([], $this->tokenScopes($token['access_token']));
+        $this->assertSame([], $this->grantedScopes($token));
     }
 
     public function test_client_with_empty_scopes_receives_no_scope(): void
@@ -40,7 +40,7 @@ class DefaultScopesTest extends TestCase
 
         $token = $this->requestToken($client);
 
-        $this->assertSame([], $this->tokenScopes($token['access_token']));
+        $this->assertSame([], $this->grantedScopes($token));
     }
 
     public function test_undefined_scopes_granted_to_the_client_are_dropped(): void
@@ -49,7 +49,7 @@ class DefaultScopesTest extends TestCase
 
         $token = $this->requestToken($client);
 
-        $this->assertSame(['venues:read'], $this->tokenScopes($token['access_token']));
+        $this->assertSame(['venues:read'], $this->grantedScopes($token));
     }
 
     public function test_requested_scopes_narrow_the_token(): void
@@ -58,7 +58,7 @@ class DefaultScopesTest extends TestCase
 
         $token = $this->requestToken($client, 'venues:read');
 
-        $this->assertSame(['venues:read'], $this->tokenScopes($token['access_token']));
+        $this->assertSame(['venues:read'], $this->grantedScopes($token));
     }
 
     public function test_requested_scopes_not_granted_to_the_client_are_dropped(): void
@@ -67,7 +67,16 @@ class DefaultScopesTest extends TestCase
 
         $token = $this->requestToken($client, 'venues:read tickets:read');
 
-        $this->assertSame(['venues:read'], $this->tokenScopes($token['access_token']));
+        $this->assertSame(['venues:read'], $this->grantedScopes($token));
+    }
+
+    public function test_token_response_scope_matches_the_issued_access_token(): void
+    {
+        $client = $this->createClient(['venues:read', 'venues:create']);
+
+        $token = $this->requestToken($client, 'venues:create');
+
+        $this->assertSame($this->accessTokenClaimScopes($token['access_token']), $this->grantedScopes($token));
     }
 
     public function test_other_grants_do_not_receive_default_scopes(): void

@@ -22,13 +22,16 @@ POST /oauth/token  grant_type=client_credentials  scope=...  → token with the 
 
 So every machine client has to keep a copy of its own permission list and send it on each token request. Every time the server grants a new scope, each client needs a config change and a redeploy. Asking for `*` doesn't help either: once the client's `scopes` column is set, `*` is not in it and gets filtered out.
 
+Passport's token response doesn't include the `scope` field either, so a client can't tell which scopes it was actually issued.
+
 When a scope is missing, Passport answers with a generic `403`. A client cannot tell it apart from any other authorization failure, so it cannot react, for example by fetching a fresh token.
 
 ## The Solution
 
-This package welds two missing pieces onto Passport:
+This package welds the missing pieces onto Passport:
 
 - **Default scopes per client.** A client credentials request without a `scope` parameter receives every scope granted to the client in `oauth_clients.scopes`. [RFC 6749 §3.3](https://www.rfc-editor.org/rfc/rfc6749#section-3.3) explicitly allows this pre-defined default, and it's how Auth0, GitHub App installation tokens, Microsoft Entra (`/.default`) and Keycloak behave.
+- **Issued scopes in the token response.** The response includes the `scope` field, so the client knows what it received without inspecting the token.
 - **`insufficient_scope` responses.** A token without a required scope receives the [RFC 6750 §3.1](https://www.rfc-editor.org/rfc/rfc6750#section-3.1) challenge, so clients can tell exactly which scope is missing:
 
 ```http
@@ -84,11 +87,17 @@ The client now requests a token without any scope and receives both.
 
 - Scopes in the column that aren't defined with `Passport::tokensCan()` are dropped.
 - `null` never grants everything by default — an unconfigured client receives nothing until you fill its column.
-- The token's scopes are in the JWT's `scopes` claim, so a client can read what it actually received.
+- The token response always carries the issued scopes in its `scope` field, as [RFC 6749 §5.1](https://www.rfc-editor.org/rfc/rfc6749#section-5.1) requires whenever they differ from the requested ones. Clients should read their scopes from there and treat the access token itself as opaque ([RFC 9068 §6](https://www.rfc-editor.org/rfc/rfc9068#section-6)).
+
+```json
+{"scope": "invoices:read invoices:create", "token_type": "Bearer", "expires_in": 31536000, "access_token": "..."}
+```
 
 ### Minimal override
 
-`ScopeRepository` extends Passport's `Bridge\ScopeRepository` and overrides only `finalizeScopes()`: when the grant is `client_credentials` and nothing was requested, it substitutes the client's granted scopes, then hands over to Passport's own filtering. `MissingScopeException` is mapped to an `HttpException` carrying the `WWW-Authenticate` header; the rest of your exception rendering stays as it is.
+- `ScopeRepository` extends Passport's `Bridge\ScopeRepository` and overrides only `finalizeScopes()`: when the grant is `client_credentials` and nothing was requested, it substitutes the client's granted scopes, then hands over to Passport's own filtering.
+- `BearerTokenResponse` extends league's `BearerTokenResponse` and only adds the `scope` field. It is installed through `Passport::$authorizationServerResponseType` unless your application already set its own response type; in that case add the `scope` field there.
+- `MissingScopeException` is mapped to an `HttpException` carrying the `WWW-Authenticate` header; the rest of your exception rendering stays as it is.
 
 ## Testing
 

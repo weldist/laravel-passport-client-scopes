@@ -86,9 +86,18 @@ abstract class TestCase extends BaseTestCase
     }
 
     /**
+     * @param  array<string, mixed>  $token
      * @return string[]
      */
-    protected function tokenScopes(string $accessToken): array
+    protected function grantedScopes(array $token): array
+    {
+        return array_values(array_filter(explode(' ', $token['scope'])));
+    }
+
+    /**
+     * @return string[]
+     */
+    protected function accessTokenClaimScopes(string $accessToken): array
     {
         $payload = explode('.', $accessToken)[1];
 
